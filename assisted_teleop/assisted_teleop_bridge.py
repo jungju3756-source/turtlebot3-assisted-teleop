@@ -1,17 +1,3 @@
-"""
-VFH-lite + 4-Way Absolute Guard Stop
-═══════════════════════════════════════════════════════════════════
-[개선점]
-  1. 깊이 확장 & 히스테리시스: 넓은 구역 선호 및 좁은 구석(corner) 회피
-  2. 회전 상한(max_correction): 과도한 오버스티어 방지
-  3. 4방향 철통 방어 (Guard Stop): 후진, 제자리 회전 시에도 좌, 우, 후방 장애물 감지하여 절대 충돌 차단
-  4. 후진 버그 수정: 속도 하한을 0.0에서 -1.4m/s로 복원하여 후진 정상 작동
-
-[포팅 이력]
-  - v1.0: Orange Pi 5 + 스쿠터 플랫폼 (LiDAR 위치 오프셋, 큰 footprint)
-  - v1.1: scan_topic / output_topic 파라미터화, TurtleBot3 기본값 적용
-"""
-
 import rclpy
 from rclpy.node import Node
 from geometry_msgs.msg import Twist
@@ -25,16 +11,13 @@ import numpy as np
 
 class AssistedTeleopBridge(Node):
 
-    N_BINS  = 72                        # 360° / 5° = 72 bins
-    BIN_RAD = 2.0 * math.pi / N_BINS    # ~0.087 rad per bin (5°)
-    FWD_IDX = N_BINS // 2               # bin 36 = 0° = forward
+    N_BINS  = 72
+    BIN_RAD = 2.0 * math.pi / N_BINS
+    FWD_IDX = N_BINS // 2              
 
     def __init__(self):
         super().__init__('assisted_teleop_bridge')
 
-        # ── 토픽 ──────────────────────────────────────────────────────────────
-        # TurtleBot3: scan_topic='/scan', output_topic='/cmd_vel'
-        # 스쿠터(Orange Pi): scan_topic='/scan_filtered', output_topic='/cmd_vel_assisted_teleop'
         self.declare_parameter('scan_topic',   '/scan')
         self.declare_parameter('input_topic',  '/joy_vel')
         self.declare_parameter('output_topic', '/cmd_vel')
@@ -42,31 +25,19 @@ class AssistedTeleopBridge(Node):
         self.declare_parameter('enable_threshold', 0.05)
         self.declare_parameter('idle_timeout',      0.5)
 
-        # ── 로봇 Footprint ────────────────────────────────────────────────────
-        # TurtleBot3 Burger 기본값:
-        #   laser_x_offset=0.0, laser_y_offset=0.0 (LiDAR가 중앙에 위치)
-        #   robot_front_m=0.17, robot_half_w=0.09
-        #
-        # 스쿠터(Orange Pi) 값 (참고):
-        #   laser_x_offset=0.44, laser_y_offset=0.24
-        #   robot_front_m=0.75,  robot_half_w=0.40
         self.declare_parameter('laser_x_offset', 0.0)
         self.declare_parameter('laser_y_offset', 0.0)
         self.declare_parameter('robot_front_m',  0.17)
         self.declare_parameter('robot_half_w',   0.09)
 
-        # ── 제동 거리 (범퍼 기준) ──────────────────────────────────────────────
-        # TurtleBot3 기본값 (스쿠터: free=1.00, guard=0.15)
-        self.declare_parameter('free_dist_m',    0.50)  # 이상: 100% 투과
-        self.declare_parameter('guard_dist_m',   0.10)  # 이하: 긴급 정지
-        self.declare_parameter('min_speed_frac', 0.35)  # 회피 중 최소 속도 비율
+        self.declare_parameter('free_dist_m',    0.50)
+        self.declare_parameter('guard_dist_m',   0.10) 
+        self.declare_parameter('min_speed_frac', 0.35)  
 
-        # ── VFH ───────────────────────────────────────────────────────────────
-        # TurtleBot3 기본값 (스쿠터: clearance=0.55)
-        self.declare_parameter('steer_gain',     2.0)   # 조향 강도 (rad/s per rad)
-        self.declare_parameter('max_correction', 0.80)  # 급회전 방지 최대 조향량
-        self.declare_parameter('clearance_m',    0.25)  # 방향 통과 최소 거리
-        self.declare_parameter('w_smooth_alpha', 0.40)  # 각속도 스무딩 계수
+        self.declare_parameter('steer_gain',     2.0)   
+        self.declare_parameter('max_correction', 0.80)
+        self.declare_parameter('clearance_m',    0.25) 
+        self.declare_parameter('w_smooth_alpha', 0.40)
 
         scan_topic        = self.get_parameter('scan_topic').value
         input_topic       = self.get_parameter('input_topic').value
@@ -113,13 +84,7 @@ class AssistedTeleopBridge(Node):
             f"AssistedTeleop ready | scan={scan_topic} -> {output_topic} | "
             f"guard={self.guard_dist}m | max_corr={self.max_corr}rad/s")
 
-    # ─────────────────────────────────────────────────────────────────────────
     def _scan_cb(self, msg: LaserScan):
-        """
-        LiDAR -> base_footprint 프레임 변환 후:
-          (1) 72-bin 극좌표 히스토그램 생성
-          (2) 전, 후, 좌, 우 4방향 최단 이격 거리 계산 (가드스톱용)
-        """
         n = len(msg.ranges)
         angles = msg.angle_min + np.arange(n, dtype=np.float32) * msg.angle_increment
         ranges = np.array(msg.ranges, dtype=np.float32)
@@ -135,16 +100,13 @@ class AssistedTeleopBridge(Node):
         bx = ranges * np.cos(angles) + self.laser_x
         by = ranges * np.sin(angles) + self.laser_y
 
-        # 로봇 footprint 내부 LiDAR 노이즈 필터링
-        # (스쿠터: 팔걸이·사용자 다리가 히스토그램을 막아 특정 방향 회피 불가 현상 방지용)
         body_mask = ((bx > -0.60) & (bx < self.robot_front) &
                      (np.abs(by) < self.robot_half_w + 0.05))
 
         valid_obs = ~body_mask
         bx = bx[valid_obs]
         by = by[valid_obs]
-
-        # --- 극좌표 히스토그램 ---
+      
         bp_angles = np.arctan2(by, bx)
         bp_dists  = np.sqrt(bx * bx + by * by)
 
@@ -156,7 +118,6 @@ class AssistedTeleopBridge(Node):
         ext = np.concatenate([hist[-2:], hist, hist[:2]])
         self.histogram = np.convolve(ext, k, mode='same')[2:-2]
 
-        # 전면 거리 (base_link 기준, 통로 평행벽 오인 방지로 폭 -2cm 좁게 잡음)
         margin_y = self.robot_half_w - 0.02
         fwd_mask = ((bx > self.robot_front) & (bx < self.robot_front + 2.0) & (np.abs(by) < margin_y))
         self.fwd_gap = float(np.min(bx[fwd_mask]) - self.robot_front) if np.any(fwd_mask) else 999.0
@@ -174,8 +135,7 @@ class AssistedTeleopBridge(Node):
         right_mask = ((by < -self.robot_half_w) & (by > -self.robot_half_w - 1.0) &
                       (bx > -0.40) & (bx < self.robot_front))
         self.right_gap = float(-self.robot_half_w - np.max(by[right_mask])) if np.any(right_mask) else 999.0
-
-    # ─────────────────────────────────────────────────────────────────────────
+      
     def _idle_check(self):
         if not self.is_active:
             return
@@ -209,7 +169,6 @@ class AssistedTeleopBridge(Node):
         out.angular.z = max(-1.5, min(1.5, w))
         self.cmd_pub.publish(out)
 
-    # ─────────────────────────────────────────────────────────────────────────
     def _adas(self, user_cmd: Twist):
         u_v = user_cmd.linear.x
         u_w = user_cmd.angular.z
@@ -217,7 +176,6 @@ class AssistedTeleopBridge(Node):
         v_out = u_v
         w_out = u_w
 
-        # VFH 회피 로직은 전진 시에만 구동
         run_vfh = u_v > self.threshold
 
         hist = self.histogram
@@ -226,8 +184,8 @@ class AssistedTeleopBridge(Node):
         need_assist = (self.fwd_gap <= self.free_dist) or (self.left_gap < 0.50) or (self.right_gap < 0.50)
 
         if run_vfh and hist is not None and need_assist:
-            SEARCH   = 18   # ±18 bins = ±90°
-            ROBOT_W  = 2    # ±2 bins = ±10°
+            SEARCH   = 18
+            ROBOT_W  = 2 
             MAX_DIST = 1.5
             W_DIST   = 5.0
             W_ANGLE  = 4.5
@@ -245,7 +203,6 @@ class AssistedTeleopBridge(Node):
                     if d < min_d:
                         min_d = d
 
-                # 범퍼 기준 유효 거리 (robot_front를 빼서 base_link → 범퍼 기준으로 통일)
                 effective_dist = min_d - self.robot_front
 
                 if effective_dist < self.clearance:
@@ -290,7 +247,6 @@ class AssistedTeleopBridge(Node):
             if run_vfh:
                 self.prev_best_angle = 0.0
 
-        # --- 4방향 절대 철통 방어 (Guard Stop) ---
         stop_msgs = []
         is_guard  = False
 
@@ -302,8 +258,7 @@ class AssistedTeleopBridge(Node):
             v_out = 0.0
             stop_msgs.append(f"REAR({self.rear_gap:.2f})")
             is_guard = True
-
-        # 측면 가드스톱은 4cm로 분리 (차선 라인 유지 허용)
+          
         SIDE_GUARD = 0.04
 
         if w_out > 0.01 and self.left_gap < SIDE_GUARD:
@@ -318,12 +273,10 @@ class AssistedTeleopBridge(Node):
         if is_guard:
             self.get_logger().warning(f"GUARD STOP: {' '.join(stop_msgs)}", throttle_duration_sec=0.2)
 
-        # VFH가 능동 개입한 경우에만 스무딩 적용 (순수 수동 조작은 즉각 응답)
         should_smooth = (is_vfh_active_correction and not is_guard)
         self._publish(v_out, w_out, smooth=should_smooth)
 
 
-# ─────────────────────────────────────────────────────────────────────────────
 def main(args=None):
     rclpy.init(args=args)
     node = AssistedTeleopBridge()
