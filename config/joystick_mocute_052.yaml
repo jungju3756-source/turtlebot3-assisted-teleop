@@ -1,0 +1,26 @@
+joy_node:
+  ros__parameters:
+    device_id: 0
+    # Mocute 052 스틱 드리프트 방지
+    deadzone: 0.1
+    autorepeat_rate: 20.0
+
+teleop_twist_joy_node:
+  ros__parameters:
+    axis_linear:
+      x: 1
+    scale_linear:
+      x: 0.4
+    scale_linear_turbo:
+      x: 0.7
+
+    axis_angular:
+      yaw: 0
+    scale_angular:
+      yaw: 0.6
+    scale_angular_turbo:
+      yaw: 1.0
+
+    require_enable_button: true
+    enable_button: 11   # 'A' button
+    enable_turbo_button: 3  # 'X' button
