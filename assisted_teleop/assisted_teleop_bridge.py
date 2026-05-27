@@ -1,7 +1,7 @@
 import rclpy
 from rclpy.node import Node
-from geometry_msgs.msg import Twist
-from sensor_msgs.msg import LaserScan
+from geometry_msgs.msg import Twist, TwistStamped
+from sensor_msgs.msg import LaserScan, Range
 from rclpy.callback_groups import ReentrantCallbackGroup
 from rclpy.executors import MultiThreadedExecutor
 from rclpy.qos import qos_profile_sensor_data
@@ -38,6 +38,8 @@ class AssistedTeleopBridge(Node):
         self.declare_parameter('max_correction', 0.80)
         self.declare_parameter('clearance_m',    0.25) 
         self.declare_parameter('w_smooth_alpha', 0.40)
+        self.declare_parameter('tof_topic',      '/tof_distance')
+        self.declare_parameter('tof_guard_m',    0.30)
 
         scan_topic        = self.get_parameter('scan_topic').value
         input_topic       = self.get_parameter('input_topic').value
@@ -55,6 +57,8 @@ class AssistedTeleopBridge(Node):
         self.max_corr     = self.get_parameter('max_correction').value
         self.clearance    = self.get_parameter('clearance_m').value
         self.w_alpha      = self.get_parameter('w_smooth_alpha').value
+        tof_topic         = self.get_parameter('tof_topic').value
+        self.tof_guard    = self.get_parameter('tof_guard_m').value
 
         self.cb_group = ReentrantCallbackGroup()
 
@@ -64,6 +68,7 @@ class AssistedTeleopBridge(Node):
         self.rear_gap  = 999.0
         self.left_gap  = 999.0
         self.right_gap = 999.0
+        self.tof_dist  = 999.0
 
         self.prev_w          = 0.0
         self.prev_best_angle = 0.0
@@ -73,16 +78,22 @@ class AssistedTeleopBridge(Node):
         self.scan_sub = self.create_subscription(
             LaserScan, scan_topic, self._scan_cb,
             qos_profile_sensor_data, callback_group=self.cb_group)
+        self.tof_sub = self.create_subscription(
+            Range, tof_topic, self._tof_cb,
+            10, callback_group=self.cb_group)
         self.joy_sub = self.create_subscription(
             Twist, input_topic, self._joy_cb,
             10, callback_group=self.cb_group)
         self.cmd_pub = self.create_publisher(
-            Twist, output_topic, 10, callback_group=self.cb_group)
+            TwistStamped, output_topic, 10, callback_group=self.cb_group)
         self.create_timer(0.1, self._idle_check, callback_group=self.cb_group)
 
         self.get_logger().info(
             f"AssistedTeleop ready | scan={scan_topic} -> {output_topic} | "
             f"guard={self.guard_dist}m | max_corr={self.max_corr}rad/s")
+
+    def _tof_cb(self, msg: Range):
+        self.tof_dist = float(msg.range)
 
     def _scan_cb(self, msg: LaserScan):
         n = len(msg.ranges)
@@ -144,7 +155,9 @@ class AssistedTeleopBridge(Node):
             self.get_logger().info(f"Idle {elapsed:.1f}s — released.")
             self.is_active = False
             self.prev_w = 0.0
-            self.cmd_pub.publish(Twist())
+            stop = TwistStamped()
+            stop.header.stamp = self.get_clock().now().to_msg()
+            self.cmd_pub.publish(stop)
 
     def _joy_cb(self, msg: Twist):
         active = abs(msg.linear.x) > self.threshold or abs(msg.angular.z) > self.threshold
@@ -157,16 +170,19 @@ class AssistedTeleopBridge(Node):
         else:
             if self.is_active:
                 self.prev_w = 0.0
-                self.cmd_pub.publish(Twist())
+                stop = TwistStamped()
+                stop.header.stamp = self.get_clock().now().to_msg()
+                self.cmd_pub.publish(stop)
 
     def _publish(self, v: float, w: float, smooth: bool = True):
         if smooth:
             w = self.w_alpha * w + (1.0 - self.w_alpha) * self.prev_w
         self.prev_w = w
 
-        out = Twist()
-        out.linear.x  = max(-1.4, min(1.4, v))
-        out.angular.z = max(-1.5, min(1.5, w))
+        out = TwistStamped()
+        out.header.stamp = self.get_clock().now().to_msg()
+        out.twist.linear.x  = max(-1.4, min(1.4, v))
+        out.twist.angular.z = max(-1.5, min(1.5, w))
         self.cmd_pub.publish(out)
 
     def _adas(self, user_cmd: Twist):
@@ -250,7 +266,11 @@ class AssistedTeleopBridge(Node):
         stop_msgs = []
         is_guard  = False
 
-        if v_out > 0.01 and self.fwd_gap < self.guard_dist:
+        if v_out > 0.01 and self.tof_dist < self.tof_guard:
+            v_out = 0.0
+            stop_msgs.append(f"TOF({self.tof_dist:.2f}m)")
+            is_guard = True
+        elif v_out > 0.01 and self.fwd_gap < self.guard_dist:
             v_out = 0.0
             stop_msgs.append(f"FWD({self.fwd_gap:.2f})")
             is_guard = True

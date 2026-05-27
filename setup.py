@@ -24,6 +24,7 @@ setup(
     entry_points={
         'console_scripts': [
             'assisted_teleop_bridge = assisted_teleop.assisted_teleop_bridge:main',
+            'tof_sensor_node = assisted_teleop.tof_sensor_node:main',
         ],
     },
 )

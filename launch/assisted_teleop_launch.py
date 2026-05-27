@@ -45,10 +45,19 @@ def generate_launch_description():
         parameters=[tb3_params, {'use_sim_time': use_sim_time}],
         output='screen')
 
+    tof_node = Node(
+        package='assisted_teleop',
+        executable='tof_sensor_node',
+        name='tof_sensor_node',
+        parameters=[{'serial_port': '/dev/ttyACM1',
+                     'obstacle_dist_mm': 400}],
+        output='screen')
+
     return LaunchDescription([
         joy_type_arg,
         use_sim_time_arg,
         joy_node,
         teleop_node,
         assisted_teleop_node,
+        tof_node,
     ])

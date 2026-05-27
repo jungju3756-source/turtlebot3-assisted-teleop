@@ -1,115 +1,167 @@
-# assisted_teleop
+# turtlebot3-assisted-teleop
 
-VFH-lite(Vector Field Histogram) 기반 Assisted Teleoperation ROS 2 패키지.
+ROS 2 Jazzy 기반 TurtleBot3 Burger 보조 텔레오퍼레이션 패키지.
 
-조이스틱 입력을 그대로 전달하되, 장애물 접근 시 자동으로 방향을 보정하고 충돌 직전 긴급 정지(Guard Stop)를 수행한다.
+Xbox 컨트롤러로 조종하면서 LiDAR(VFH-lite)와 ToF 센서(VL53L8CX)가 자동으로 장애물을 회피하고 충돌 직전 강제 정지합니다.
 
 ---
 
-## 알고리즘 개요
+## 시스템 구성
 
 ```
-조이스틱 → [teleop_twist_joy] → /joy_vel
-                                      ↓
-                         [assisted_teleop_bridge]
-                          ├── LiDAR(/scan) 수신
-                          ├── VFH-lite: 빈 방향 탐색 → 조향 보정
-                          └── Guard Stop: 4방향 물리 충돌 차단
-                                      ↓
-                                  /cmd_vel → 로봇 구동
+Xbox 컨트롤러 (BT 동글)
+        ↓
+    joy_node → teleop_twist_joy → /joy_vel
+                                        ↓
+                           assisted_teleop_bridge
+                           ├── /scan (LiDAR, VFH-lite 회피)
+                           ├── /tof_distance (ToF Guard Stop)
+                           └── Guard Stop: 전/후/좌/우 + ToF
+                                        ↓
+                                   /cmd_vel → TurtleBot3
 ```
 
-### 주요 기능
-| 기능 | 설명 |
+---
+
+## 하드웨어
+
+| 장치 | 용도 |
 |------|------|
-| VFH-lite | 72-bin 극좌표 히스토그램으로 가장 열린 방향 탐색, 조향 보정 |
-| 4방향 Guard Stop | 전/후/좌/우 범퍼 기준 거리 측정, 충돌 직전 강제 정지 |
-| 속도 감속 | 장애물 접근 시 거리 비례 감속 (min_speed_frac 이하로는 내려가지 않음) |
-| 스무딩 | VFH 개입 시에만 각속도 스무딩 적용 (수동 조작은 즉각 응답) |
+| Raspberry Pi 5 | 메인 컴퓨터 |
+| TurtleBot3 Burger | 로봇 플랫폼 |
+| LDS-02 LiDAR | 360° 장애물 감지 (VFH) |
+| VL53L8CX (RP2350 Zero) | 전방 ToF 근거리 감지 |
+| Xbox Series X\|S 컨트롤러 | 조종 입력 (BT 동글 필수) |
 
 ---
 
-## 개발 이력
+## 소프트웨어 환경
 
-- **v1.0** — Orange Pi 5 + 스쿠터 플랫폼에서 구현 및 실주행 검증
-  - LiDAR 위치 오프셋 보정 (laser_x=0.44m, laser_y=0.24m)
-  - 스쿠터 footprint 기준 (front=0.75m, half_w=0.40m)
-  - 휠체어 본체 노이즈(팔걸이·다리) 필터링
-  - 갈지자(Zig-zag) 주행 방지 히스테리시스 적용
-
-- **v1.1** — TurtleBot3 포팅 준비
-  - `scan_topic` / `output_topic` 파라미터화
-  - TB3 Burger 기본값 적용 (`config/turtlebot3_params.yaml`)
-  - `use_sim_time` launch 인수 추가 (Gazebo 시뮬 지원)
+- OS: Ubuntu 24.04 LTS (Raspberry Pi 5, aarch64)
+- ROS 2: Jazzy Jalisco
+- Python: 3.12
 
 ---
 
-## TurtleBot3 포팅 시 확인 사항
+## 설치
 
-### 1. 파라미터 (`config/turtlebot3_params.yaml`)
-
-현재 TB3 Burger 기준 기본값이 설정되어 있다. 실제 로봇에 맞게 검증 필요:
-
-| 파라미터 | TB3 기본값 | 스쿠터 값 | 설명 |
-|----------|-----------|----------|------|
-| `laser_x_offset` | 0.0 | 0.44 | LiDAR X 위치 (base_link 기준, m) |
-| `laser_y_offset` | 0.0 | 0.24 | LiDAR Y 위치 (base_link 기준, m) |
-| `robot_front_m` | 0.17 | 0.75 | base_link → 앞 범퍼 거리 (m) |
-| `robot_half_w` | 0.09 | 0.40 | 로봇 반폭 (m) |
-| `free_dist_m` | 0.50 | 1.00 | 이 거리 이상이면 ADAS 미개입 (m) |
-| `guard_dist_m` | 0.10 | 0.15 | 긴급 정지 거리 (m) |
-| `clearance_m` | 0.25 | 0.55 | VFH 방향 통과 최소 거리 (m) |
-
-### 2. LiDAR 좌표계 확인
-
-TB3의 `/scan` 토픽이 `base_link` 기준으로 발행되는지, `laser_link` 기준인지 확인.  
-`laser_link`라면 `laser_x_offset` / `laser_y_offset`에 실제 tf 변환값을 입력해야 한다.
+### 1. 의존 패키지 설치
 
 ```bash
-ros2 run tf2_ros tf2_echo base_link laser_link
+sudo apt install -y ros-jazzy-joy ros-jazzy-teleop-twist-joy
+pip3 install pyserial
 ```
 
-### 3. 아직 미완성인 부분 (개발 필요)
+### 2. 워크스페이스에 클론
 
-- [ ] TB3 실제 주행 파라미터 튜닝 (`free_dist_m`, `clearance_m` 등)
-- [ ] Gazebo 시뮬레이션 검증
-- [ ] `scan_topic` TB3가 필터링된 스캔을 쓰는 경우 처리 (`scan_filtered` 여부 확인)
-- [ ] 속도 제한 하드코딩 (`±1.4m/s`) → TB3 최대속도(0.22m/s)에 맞게 파라미터화 필요
-
----
-
-## 빌드 및 실행
-
-### 의존 패키지 설치
 ```bash
-sudo apt install ros-jazzy-joy ros-jazzy-teleop-twist-joy
+cd ~/turtlebot3_ws/src
+git clone https://github.com/jungju3756-source/turtlebot3-assisted-teleop assisted-teleop
 ```
 
-### 빌드
+### 3. 빌드
+
 ```bash
-# 워크스페이스 루트에서
-colcon build --packages-select assisted_teleop
+cd ~/turtlebot3_ws
+source /opt/ros/jazzy/setup.bash
+colcon build --symlink-install --packages-select assisted_teleop
 source install/setup.bash
 ```
 
-### 실행
+---
+
+## 실행 방법
+
+### 준비물 확인
+
+- TurtleBot3 전원 ON (배터리)
+- OpenCR micro-USB → Pi 연결 (`/dev/ttyACM0`)
+- LiDAR USB → Pi 연결 (`/dev/ttyUSB0`)
+- RP2350 Zero (VL53L8CX) USB → Pi 연결 (`/dev/ttyACM1`)
+- Xbox 컨트롤러 → USB 블루투스 동글로 연결
+
+### 터미널 1 — 로봇 bringup
+
 ```bash
-# 기본 조이스틱
-ros2 launch assisted_teleop assisted_teleop_launch.py
-
-# Mocute 052 조이스틱
-ros2 launch assisted_teleop assisted_teleop_launch.py joy_type:=mocute_052
-
-# Gazebo 시뮬레이션
-ros2 launch assisted_teleop assisted_teleop_launch.py use_sim_time:=true
+ros2 launch turtlebot3_bringup robot.launch.py
 ```
 
-### 토픽 확인
-```bash
-ros2 topic echo /cmd_vel          # 출력 확인
-ros2 topic hz /scan               # LiDAR 수신 확인
-ros2 run rqt_graph rqt_graph      # 전체 노드 구성 확인
+아래 메시지가 나올 때까지 대기:
 ```
+[turtlebot3_node]: Run!
+LDS-02 started successfully
+```
+
+### 터미널 2 — 모터 파워 ON (매번 필수)
+
+```bash
+ros2 service call /motor_power std_srvs/srv/SetBool "{data: true}"
+```
+
+> 이 명령 없이는 cmd_vel을 보내도 바퀴가 돌지 않습니다.
+
+### 터미널 3 — 조이스틱 + 장애물 회피
+
+```bash
+ros2 launch assisted_teleop assisted_teleop_launch.py joy_type:=xbox
+```
+
+성공 시 출력:
+```
+[joy_node]: Opened joystick: Xbox Series X Controller.
+[tof_sensor_node]: ToF opened: /dev/ttyACM1 | threshold=400mm
+[assisted_teleop_bridge]: AssistedTeleop ready
+```
+
+---
+
+## 조종 방법 (Xbox 컨트롤러)
+
+| 입력 | 동작 |
+|------|------|
+| 왼쪽 스틱 위 | 전진 (0.20 m/s) |
+| 왼쪽 스틱 아래 | 후진 |
+| 왼쪽 스틱 좌우 | 좌/우 회전 |
+| RB (오른쪽 범퍼) | 터보 (0.22 m/s) |
+| 스틱 놓으면 | 자동 정지 |
+
+---
+
+## 장애물 회피 동작
+
+| 거리 | 동작 |
+|------|------|
+| 50cm 이상 | ADAS 미개입 |
+| 10~50cm | 속도 감속 + VFH 자동 조향 |
+| 10cm 이하 | LiDAR Guard Stop (강제 정지) |
+| 40cm 이하 (ToF) | ToF Guard Stop (강제 정지) |
+
+터미널 로그 예시:
+```
+[assisted_teleop_bridge]: VFH L tgt=+15° v:0.18
+[tof_sensor_node]: ToF 장애물 감지: 253mm (임계값 400mm)
+[assisted_teleop_bridge]: GUARD STOP: TOF(0.25m)
+```
+
+---
+
+## 파라미터 튜닝
+
+### `config/turtlebot3_params.yaml`
+
+| 파라미터 | 기본값 | 설명 |
+|----------|--------|------|
+| `free_dist_m` | 0.50m | VFH 개입 시작 거리 |
+| `guard_dist_m` | 0.10m | LiDAR 긴급 정지 거리 |
+| `clearance_m` | 0.25m | VFH 통과 최소 폭 |
+| `tof_guard_m` | 0.30m | ToF 긴급 정지 거리 |
+
+### `launch/assisted_teleop_launch.py`
+
+| 파라미터 | 기본값 | 설명 |
+|----------|--------|------|
+| `serial_port` | `/dev/ttyACM1` | RP2350 시리얼 포트 |
+| `obstacle_dist_mm` | 400 | ToF 감지 임계값 (mm) |
 
 ---
 
@@ -118,14 +170,14 @@ ros2 run rqt_graph rqt_graph      # 전체 노드 구성 확인
 ```
 assisted_teleop/
 ├── assisted_teleop/
-│   └── assisted_teleop_bridge.py   # 핵심 노드 (VFH + Guard Stop)
+│   ├── assisted_teleop_bridge.py   # VFH + Guard Stop + ToF 통합 노드
+│   └── tof_sensor_node.py          # VL53L8CX 시리얼 읽기 → /tof_distance
 ├── config/
-│   ├── turtlebot3_params.yaml      # TB3용 파라미터
-│   ├── joystick_default.yaml       # 기본 조이스틱 설정
-│   └── joystick_mocute_052.yaml    # Mocute 052 설정
+│   ├── turtlebot3_params.yaml      # 로봇 파라미터
+│   ├── joystick_xbox.yaml          # Xbox 컨트롤러 설정
+│   └── joystick_default.yaml       # 기본 조이스틱 설정
 ├── launch/
-│   └── assisted_teleop_launch.py   # joy + teleop_twist_joy + 이 노드 통합 실행
+│   └── assisted_teleop_launch.py   # 통합 런치 파일
 ├── package.xml
-├── setup.py
-└── README.md
+└── setup.py
 ```
