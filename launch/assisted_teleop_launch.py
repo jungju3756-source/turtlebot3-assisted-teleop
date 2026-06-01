@@ -49,7 +49,7 @@ def generate_launch_description():
         package='assisted_teleop',
         executable='tof_sensor_node',
         name='tof_sensor_node',
-        parameters=[{'serial_port': '/dev/ttyACM1',
+        parameters=[{'serial_port': '/dev/tof',
                      'obstacle_dist_mm': 400}],
         output='screen')
 

@@ -3,7 +3,7 @@ import threading
 
 import rclpy
 from rclpy.node import Node
-from sensor_msgs.msg import Range
+from sensor_msgs.msg import Range, Image
 
 try:
     import serial
@@ -20,13 +20,16 @@ class TofSensorNode(Node):
         self.declare_parameter('obstacle_dist_mm',     400)
         self.declare_parameter('front_rows',           [2, 3, 4, 5])
         self.declare_parameter('front_cols',           [2, 3, 4, 5])
+        self.declare_parameter('image_scale',          20)
 
-        port       = self.get_parameter('serial_port').value
-        self.thr   = self.get_parameter('obstacle_dist_mm').value
+        port        = self.get_parameter('serial_port').value
+        self.thr    = self.get_parameter('obstacle_dist_mm').value
         self.f_rows = self.get_parameter('front_rows').value
         self.f_cols = self.get_parameter('front_cols').value
+        self.scale  = self.get_parameter('image_scale').value
 
-        self.pub = self.create_publisher(Range, '/tof_distance', 10)
+        self.pub     = self.create_publisher(Range, '/tof_distance', 10)
+        self.img_pub = self.create_publisher(Image, '/tof_image', 10)
 
         self.grid      = [[None] * 8 for _ in range(8)]
         self.in_frame  = False
@@ -86,7 +89,62 @@ class TofSensorNode(Node):
         if row_idx == 7:
             self._process_frame()
 
+    def _dist_to_color(self, dist_mm):
+        """Jet colormap: red=close(0mm) → green → blue=far(2000mm), gray=invalid"""
+        if dist_mm is None or dist_mm <= 0:
+            return (60, 60, 60)
+        d = min(float(dist_mm), 2000.0)
+        ratio = d / 2000.0
+        h = ratio * 240.0
+        h6 = h / 60.0
+        i = int(h6)
+        f = h6 - i
+        if i == 0:
+            r, g, b = 255, int(255 * f), 0
+        elif i == 1:
+            r, g, b = int(255 * (1 - f)), 255, 0
+        elif i == 2:
+            r, g, b = 0, 255, int(255 * f)
+        elif i == 3:
+            r, g, b = 0, int(255 * (1 - f)), 255
+        elif i == 4:
+            r, g, b = int(255 * f), 0, 255
+        else:
+            r, g, b = 255, 0, int(255 * (1 - f))
+        return (r, g, b)
+
+    def _publish_image(self, stamp):
+        s = self.scale
+        h, w = 8 * s, 8 * s
+        data = bytearray(h * w * 3)
+        for row in range(8):
+            for col in range(8):
+                r, g, b = self._dist_to_color(self.grid[row][col])
+                is_front = (row in self.f_rows and col in self.f_cols)
+                for sr in range(s):
+                    for sc in range(s):
+                        if is_front and (sr == 0 or sr == s - 1 or sc == 0 or sc == s - 1):
+                            pr, pg, pb = 255, 255, 255  # white border for detection zone
+                        else:
+                            pr, pg, pb = r, g, b
+                        px = ((row * s + sr) * w + (col * s + sc)) * 3
+                        data[px] = pr
+                        data[px + 1] = pg
+                        data[px + 2] = pb
+        img = Image()
+        img.header.stamp = stamp
+        img.header.frame_id = 'tof_sensor'
+        img.height = h
+        img.width = w
+        img.encoding = 'rgb8'
+        img.is_bigendian = False
+        img.step = w * 3
+        img.data = bytes(data)
+        self.img_pub.publish(img)
+
     def _process_frame(self):
+        now = self.get_clock().now().to_msg()
+
         dists = []
         for r in self.f_rows:
             for c in self.f_cols:
@@ -94,26 +152,24 @@ class TofSensorNode(Node):
                 if v is not None and v > 0:
                     dists.append(v)
 
-        if not dists:
-            return
+        if dists:
+            min_mm = min(dists)
+            msg = Range()
+            msg.header.stamp    = now
+            msg.header.frame_id = 'tof_sensor'
+            msg.radiation_type  = Range.INFRARED
+            msg.field_of_view   = 0.785
+            msg.min_range       = 0.04
+            msg.max_range       = 4.0
+            msg.range           = min_mm / 1000.0
+            self.pub.publish(msg)
 
-        min_mm = min(dists)
+            if min_mm < self.thr:
+                self.get_logger().warning(
+                    f"ToF 장애물 감지: {min_mm}mm (임계값 {self.thr}mm)",
+                    throttle_duration_sec=0.3)
 
-        msg = Range()
-        msg.header.stamp       = self.get_clock().now().to_msg()
-        msg.header.frame_id    = 'tof_sensor'
-        msg.radiation_type     = Range.INFRARED
-        msg.field_of_view      = 0.785
-        msg.min_range          = 0.04
-        msg.max_range          = 4.0
-        msg.range              = min_mm / 1000.0
-
-        self.pub.publish(msg)
-
-        if min_mm < self.thr:
-            self.get_logger().warning(
-                f"ToF 장애물 감지: {min_mm}mm (임계값 {self.thr}mm)",
-                throttle_duration_sec=0.3)
+        self._publish_image(now)
 
 
 def main(args=None):
