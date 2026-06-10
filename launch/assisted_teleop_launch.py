@@ -53,12 +53,18 @@ def generate_launch_description():
         name='distance_marker_node',
         output='screen')
 
-    # ── 뎁스 → PointCloud2 변환 (캠라파 D405 → /camera/points) ────────
-    depth_pointcloud_node = Node(
+    # ── Depth → /depth/front_distance (obstacle_detector 3번째 소스) ──
+    depth_bridge_node = Node(
         package='assisted_teleop',
-        executable='depth_pointcloud_node',
-        name='depth_pointcloud_node',
-        parameters=[{'skip': 4}],   # Pi 부하 감소: 4프레임마다 1개 발행
+        executable='depth_bridge_node',
+        name='depth_bridge_node',
+        parameters=[{
+            'skip':        3,     # 3프레임마다 처리 (Pi 부하 감소)
+            'roi_h_frac':  0.4,   # 중앙 40% 세로 ROI
+            'roi_w_frac':  0.4,   # 중앙 40% 가로 ROI
+            'min_depth_m': 0.15,
+            'max_depth_m': 3.0,
+        }],
         output='screen')
 
     return LaunchDescription([
@@ -68,5 +74,5 @@ def generate_launch_description():
         teleop_node,
         tof_node,
         distance_marker_node,
-        depth_pointcloud_node,
+        depth_bridge_node,
     ])
