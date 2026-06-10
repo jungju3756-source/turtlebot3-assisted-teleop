@@ -72,7 +72,7 @@
 
 | 항목 | 내용 |
 |------|------|
-| 로봇 | TurtleBot3 Waffle |
+| 로봇 | TurtleBot3 Burger |
 | 컴퓨터 | Raspberry Pi 5 (ROS2 Jazzy, aarch64) |
 | 시각화 VM | Ubuntu 24.04 VMware (x86_64) |
 | 캠라파 | 192.168.0.43 (RealSense D405) |
