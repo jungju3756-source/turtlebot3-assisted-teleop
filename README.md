@@ -72,9 +72,10 @@
 
 | 항목 | 내용 |
 |------|------|
-| 로봇 | TurtleBot3 Burger |
+| 로봇 | TurtleBot3 Waffle |
 | 컴퓨터 | Raspberry Pi 5 (ROS2 Jazzy, aarch64) |
 | 시각화 VM | Ubuntu 24.04 VMware (x86_64) |
+| 캠라파 | 192.168.0.43 (RealSense D405) |
 | Pi IP | 192.168.0.36 |
 | VM IP | 192.168.0.72 |
 | ROS_DOMAIN_ID | 40 |
@@ -98,17 +99,17 @@
 
 ---
 
-## udev 규칙 (`/etc/udev/rules.d/99-turtlebot3-usb.rules`)
+## udev 규칙
 
+`/etc/udev/rules.d/99-pico-tof.rules` (ToF 심링크 + ModemManager 무시):
 ```
-SUBSYSTEM=="tty", ATTRS{idVendor}=="0483", ATTRS{idProduct}=="5740", SYMLINK+="opencr", MODE="0666"
-SUBSYSTEM=="tty", ATTRS{idVendor}=="10c4", ATTRS{idProduct}=="ea60", SYMLINK+="lidar", MODE="0666"
-SUBSYSTEM=="tty", ATTRS{idVendor}=="2e8a", ATTRS{idProduct}=="000f", ATTRS{serial}=="39794856282B5B2B", SYMLINK+="tof", MODE="0666"
+SUBSYSTEM=="tty", ATTRS{idVendor}=="2e8a", ATTRS{idProduct}=="000f", SYMLINK+="tof", ENV{ID_MM_DEVICE_IGNORE}="1"
+SUBSYSTEM=="tty", ATTRS{idVendor}=="2e8a", ATTRS{idProduct}=="000b", ENV{ID_MM_DEVICE_IGNORE}="1"
 ```
 
 재적용:
 ```bash
-sudo udevadm control --reload-rules && sudo udevadm trigger
+sudo udevadm control --reload-rules && sudo udevadm trigger --subsystem-match=tty
 ```
 
 ---
@@ -135,14 +136,12 @@ bluetoothctl connect E4:17:D8:E6:37:F9
 
 | 파일 | 역할 |
 |------|------|
-| `assisted_teleop/assisted_teleop_bridge.py` | VFH-lite 장애물 회피 + Guard Stop |
-| `assisted_teleop/tof_sensor_node.py` | ToF 센서 읽기 → `/tof_distance`, `/tof_image` 퍼블리시 |
-| `assisted_teleop/depth_pointcloud_node.py` | RealSense 뎁스 → `/camera/points` 변환 |
+| `tof_sensor_node.py` | ToF 직렬 읽기 → `/tof_distance`, `/tof_image`, `/tof/distances`, `/tof/status`<br>**`distance_scale=10.0`** 파라미터: Pico 출력 cm → mm 변환 |
+| `depth_bridge_node.py` | RealSense aligned depth → `/depth/front_distance` (Float32, m)<br>중앙 ROI 40%×40%, 5th percentile, `skip=3` |
+| `distance_marker_node.py` | LaserScan + ToF + Depth → `/distance_markers` (RViz2 거리선) |
 | `config/joystick_8bitdo_micro.yaml` | 8BitDo Micro D-pad 매핑 |
 | `config/joystick_xbox.yaml` | Xbox 컨트롤러 매핑 |
-| `config/turtlebot3_params.yaml` | 로봇 파라미터 |
-| `launch/full_system_launch.py` | Pi 통합 런치 (bringup + teleop + ToF) |
-| `launch/assisted_teleop_launch.py` | 조이스틱 + ToF + 브리지 런치 |
+| `launch/assisted_teleop_launch.py` | 조이스틱 + ToF + Depth + 마커 런치 |
 
 ### 2. `voice_alert`
 경로: `src/voice_alert/`
@@ -220,42 +219,33 @@ launch_arguments={'port': '/dev/lidar', ...}  # ttyUSB0 → /dev/lidar
 
 ## 실행 방법
 
-### Pi 실행 순서
+### Pi 원커맨드 (alias)
 
 ```bash
-# 1. BT 먼저 연결 (SSH 끊김 방지)
-bluetoothctl connect E4:17:D8:E6:37:F9
-
-# 2. tmux 세션 시작
-tmux new -s robot
-
-# 3. tmux 안에서 launch
-source /opt/ros/jazzy/setup.bash
-source ~/turtlebot3_ws/install/setup.bash
-ros2 launch assisted_teleop full_system_launch.py
+rob        # 전체 시작 (CamPi + VM + Pi 스택)
+rob_stop   # 전체 종료
+rob_log    # tmux 세션 재접속
 ```
 
-SSH 재접속 후: `tmux attach -t robot`
-
-### VM 실행
+### 스크립트 직접 실행
 
 ```bash
-# 터미널 1 — TTS
-export ROS_DOMAIN_ID=40
-ros2 run voice_alert voice_alert_node
-
-# 터미널 2 — RViz2
-export ROS_DOMAIN_ID=40
-rviz2
+~/turtlebot3_ws/start.sh   # 전체 시작
+~/turtlebot3_ws/stop.sh    # 전체 종료
+tmux attach -t robot       # 로그 확인
 ```
 
-### RViz2 설정
-1. Fixed Frame → `base_footprint`
-2. Add → LaserScan → Topic: `/scan`, Reliability: `Best Effort`, Style: `Squares`, Size: `0.05`
-3. Add → Image → Topic: `/tof_image`
-4. File → Save Config As → `~/tof_lidar.rviz`
+### 캠라파 원커맨드
 
-다음부턴: `rviz2 -d ~/tof_lidar.rviz`
+```bash
+cam   # RealSense D405 시작 (alias)
+```
+
+### VM 원커맨드
+
+```bash
+mon   # 시각화 시작 (alias)
+```
 
 ---
 
