@@ -1,0 +1,44 @@
+slam_toolbox:
+  ros__parameters:
+    # 모드
+    mode: mapping
+    use_sim_time: false
+
+    # 스캔 토픽
+    scan_topic: /scan
+    odom_frame: odom
+    map_frame: map
+    base_frame: base_footprint
+
+    # 지도 해상도 (2.5cm — 40cm 통로 정밀 표현)
+    resolution: 0.025
+    max_laser_range: 8.0
+
+    # 스캔 정합 빈도 (0.2m 이동마다 — 드리프트 감소)
+    minimum_travel_distance: 0.2
+    minimum_travel_heading: 0.2
+    scan_buffer_size: 15
+    scan_buffer_maximum_scan_distance: 10.0
+
+    # 루프 클로저 (보수적 — 벽 함부로 안 옮김)
+    loop_match_minimum_response_fine: 0.55
+    loop_match_minimum_response_coarse: 0.40
+    loop_match_maximum_variance_coarse: 3.0
+    loop_search_maximum_distance: 3.0
+
+    # 정합 거부 임계
+    link_match_minimum_response_fine: 0.12
+    link_scan_maximum_distance: 1.5
+
+    # 지도 갱신
+    map_update_interval: 2.0
+    occupancy_threshold: 0.25
+
+    # 기타
+    use_multithread: true
+    solver_plugin: solver_plugins::CeresSolver
+    ceres_linear_solver: SPARSE_NORMAL_CHOLESKY
+    ceres_preconditioner: SCHUR_JACOBI
+    ceres_trust_strategy: LEVENBERG_MARQUARDT
+    ceres_dogleg_type: TRADITIONAL_DOGLEG
+    ceres_loss_function: None

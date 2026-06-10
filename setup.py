@@ -26,6 +26,7 @@ setup(
             'assisted_teleop_bridge = assisted_teleop.assisted_teleop_bridge:main',
             'tof_sensor_node = assisted_teleop.tof_sensor_node:main',
             'depth_pointcloud_node = assisted_teleop.depth_pointcloud_node:main',
+            'distance_marker_node = assisted_teleop.distance_marker_node:main',
         ],
     },
 )
