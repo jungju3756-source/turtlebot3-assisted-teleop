@@ -13,11 +13,11 @@ from rclpy.qos import QoSProfile, ReliabilityPolicy, DurabilityPolicy, HistoryPo
 from sensor_msgs.msg import Image
 from std_msgs.msg import Float32
 
-BEST_EFFORT_QOS = QoSProfile(
+DEPTH_QOS = QoSProfile(
     reliability=ReliabilityPolicy.BEST_EFFORT,
     durability=DurabilityPolicy.VOLATILE,
     history=HistoryPolicy.KEEP_LAST,
-    depth=1,
+    depth=5,
 )
 
 
@@ -26,7 +26,7 @@ class DepthBridgeNode(Node):
     def __init__(self):
         super().__init__('depth_bridge')
 
-        self.declare_parameter('depth_topic',  '/camera/camera/aligned_depth_to_color/image_raw')
+        self.declare_parameter('depth_topic',  '/camera/camera/depth/image_rect_raw')
         self.declare_parameter('output_topic', '/depth/front_distance')
         self.declare_parameter('roi_h_frac',   0.4)   # 중앙 세로 비율
         self.declare_parameter('roi_w_frac',   0.4)   # 중앙 가로 비율
@@ -45,7 +45,7 @@ class DepthBridgeNode(Node):
         self._skip   = int(self.get_parameter('skip').value)
         self._count  = 0
 
-        self.create_subscription(Image, depth_topic, self._depth_cb, BEST_EFFORT_QOS)
+        self.create_subscription(Image, depth_topic, self._depth_cb, DEPTH_QOS)
         self._pub = self.create_publisher(Float32, output_topic, 10)
 
         self.get_logger().info(

@@ -1,0 +1,224 @@
+Panels:
+  - Class: rviz_common/Displays
+    Help Height: 78
+    Name: Displays
+    Property Tree Widget:
+      Expanded:
+        - /Global Options1
+        - /LaserScan1
+        - /Map1
+        - /MarkerArray1
+        - /MarkerArray2
+      Splitter Ratio: 0.5
+    Tree Height: 500
+  - Class: rviz_common/Views
+    Name: Views
+Visualization Manager:
+  Class: ""
+  Displays:
+    - Class: rviz_default_plugins/Grid
+      Name: Grid
+      Enabled: true
+      Cell Size: 0.5
+      Color: 100; 100; 100
+      Plane: XY
+      Plane Cell Count: 40
+      Reference Frame: <Fixed Frame>
+
+    - Class: rviz_default_plugins/TF
+      Name: TF
+      Enabled: true
+      Frame Timeout: 15
+      Show Arrows: false
+      Show Axes: true
+      Show Names: false
+
+    - Class: rviz_default_plugins/RobotModel
+      Name: RobotModel
+      Enabled: true
+      Description Source: Topic
+      Description Topic:
+        Value: /robot_description
+        Depth: 5
+        Durability Policy: Transient Local
+        Reliability Policy: Reliable
+
+    - Class: rviz_default_plugins/Map
+      Name: Map (SLAM)
+      Enabled: true
+      Topic:
+        Value: /map
+        Depth: 5
+        Durability Policy: Transient Local
+        Reliability Policy: Reliable
+      Alpha: 0.7
+      Color Scheme: map
+      Draw Behind: false
+      Update Topic:
+        Value: /map_updates
+        Depth: 5
+        Durability Policy: Volatile
+        Reliability Policy: Reliable
+
+    - Class: rviz_default_plugins/LaserScan
+      Name: LaserScan
+      Enabled: true
+      Topic:
+        Value: /scan
+        Depth: 10
+        Durability Policy: Volatile
+        Reliability Policy: Best Effort
+      Alpha: 1.0
+      Autocompute Intensity Bounds: true
+      Color: 0; 255; 0
+      Color Transformer: FlatColor
+      Decay Time: 0.0
+      Size (Pixels): 3
+      Size (m): 0.03
+      Style: Squares
+
+    - Class: rviz_default_plugins/MarkerArray
+      Name: MonitorMarkers
+      Enabled: true
+      Topic:
+        Value: /monitor/markers
+        Depth: 10
+        Durability Policy: Volatile
+        Reliability Policy: Reliable
+
+    - Class: rviz_default_plugins/MarkerArray
+      Name: DistanceMarkers
+      Enabled: false
+      Topic:
+        Value: /distance_markers
+        Depth: 10
+        Durability Policy: Volatile
+        Reliability Policy: Reliable
+
+    - Class: rviz_default_plugins/Image
+      Name: ToF Image
+      Enabled: true
+      Topic:
+        Value: /tof_image
+        Depth: 5
+        Durability Policy: Volatile
+        Reliability Policy: Reliable
+      Max Value: 1.0
+      Min Value: 0.0
+      Median window: 5
+      Transport Hint: raw
+
+    - Class: rviz_default_plugins/Image
+      Name: Distance HUD
+      Enabled: true
+      Topic:
+        Value: /distance_hud
+        Depth: 5
+        Durability Policy: Volatile
+        Reliability Policy: Reliable
+      Max Value: 1.0
+      Min Value: 0.0
+      Median window: 5
+      Transport Hint: raw
+
+    - Class: rviz_default_plugins/Image
+      Name: Color Camera
+      Enabled: false
+      Topic:
+        Value: /camera/camera/color/image_raw
+        Depth: 5
+        Durability Policy: Volatile
+        Reliability Policy: Reliable
+      Max Value: 1.0
+      Min Value: 0.0
+      Median window: 5
+      Transport Hint: raw
+
+    - Class: rviz_default_plugins/Image
+      Name: YOLO Detection
+      Enabled: true
+      Topic:
+        Value: /yolo/image
+        Depth: 5
+        Durability Policy: Volatile
+        Reliability Policy: Reliable
+      Max Value: 1.0
+      Min Value: 0.0
+      Median window: 5
+      Transport Hint: raw
+
+    - Class: rviz_default_plugins/Image
+      Name: Depth Image
+      Enabled: true
+      Topic:
+        Value: /camera/camera/aligned_depth_to_color/image_raw
+        Depth: 5
+        Durability Policy: Volatile
+        Reliability Policy: Reliable
+      Max Value: 1.0
+      Min Value: 0.0
+      Median window: 5
+      Transport Hint: raw
+
+    - Class: rviz_default_plugins/PointCloud2
+      Name: Depth PointCloud
+      Enabled: false
+      Topic:
+        Value: /camera/points
+        Depth: 5
+        Durability Policy: Volatile
+        Reliability Policy: Reliable
+      Alpha: 0.8
+      Autocompute Intensity Bounds: true
+      Autocompute Value Bounds:
+        Max Value: 10.0
+        Min Value: 0.0
+        Value: true
+      Color Transformer: AxisColor
+      Axis: Z
+      Size (m): 0.01
+      Style: Points
+
+  Global Options:
+    Background Color: 40; 40; 40
+    Fixed Frame: odom
+    Frame Rate: 15
+  Name: root
+  Tools:
+    - Class: rviz_default_plugins/MoveCamera
+    - Class: rviz_default_plugins/FocusCamera
+    - Class: rviz_default_plugins/Measure
+      Line color: 128; 128; 0
+  Value: true
+  Views:
+    Current:
+      Class: rviz_default_plugins/Orbit
+      Distance: 4.0
+      Enable Stereo Rendering:
+        Stereo Eye Separation: 0.06
+        Stereo Focal Distance: 1.0
+        Swap Stereo Eyes: false
+        Value: false
+      Focal Point:
+        X: 0.0
+        Y: 0.0
+        Z: 0.0
+      Focal Shape Fixed Size: true
+      Focal Shape Size: 0.05
+      Invert Z Axis: false
+      Name: Current View
+      Near Clip Distance: 0.01
+      Pitch: 0.8
+      Target Frame: <Fixed Frame>
+      Yaw: 3.14
+Window Geometry:
+  Displays:
+    collapsed: false
+  Height: 900
+  Hide Left Dock: false
+  Hide Right Dock: false
+  QMainWindow State: 000000ff00000000fd000000040000000000000156000002c4fc0200000008fb0000001200530065006c0065006300740069006f006e00000001e10000009b0000005c00fffffffb0000001e0054006f006f006c002000500072006f00700065007200740069006500730100000041000000780000000000000000fb0000000a00560069006500770073000000003d000002c4000000a400fffffffb0000001200530065006c0065006300740069006f006e010000025a000000b200000000000000000000000200000490000000a9fc0100000001fb0000000a00560069006500770073030000004e00000080000002e10000019600000003000004420000003efc0000000000000001000000020000000100000002fb0000000e0054006f006f006c00730100000000ffffffff0000000000000000
+  Name: rviz
+  Width: 1400
+  X: 0
+  Y: 0

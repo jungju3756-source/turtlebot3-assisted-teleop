@@ -28,7 +28,7 @@ class TofSensorNode(Node):
         self.declare_parameter('front_rows',           [2, 3, 4, 5])
         self.declare_parameter('front_cols',           [2, 3, 4, 5])
         self.declare_parameter('image_scale',          20)
-        self.declare_parameter('distance_scale',       10.0)  # cm→mm (Pico 출력이 cm인 경우)
+        self.declare_parameter('distance_scale',       1.0)   # VL53L8CX 는 mm 출력 (10이면 10배 뻥튀기됨)
 
         port        = self.get_parameter('serial_port').value
         self.thr    = self.get_parameter('obstacle_dist_mm').value

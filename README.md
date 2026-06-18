@@ -1,5 +1,11 @@
 # TurtleBot3 Assisted Teleop — 구현 정리
 
+> **📌 최신 구현 현황은 [IMPLEMENTATION_CURRENT.md](IMPLEMENTATION_CURRENT.md) 를 참고하세요.**
+> 아래 문서는 초기 단일 `assisted_teleop` 패키지 설계 기준입니다. 현재는
+> `shared_control`(센서 융합·중재) · `tb3_monitor`(VM HUD·RViz2·YOLO) 패키지로 확장되었고,
+> ToF 중앙 2×2 ROI, Depth raw 파이프라인, LiDAR 정면 정렬(180° 반전 + −5cm 보정),
+> 전진 한정 음성 경보, 자동 회피 비활성화 등이 반영되어 있습니다.
+
 ## 시스템 블록도
 
 ```
